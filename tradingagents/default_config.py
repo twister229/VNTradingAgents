@@ -20,6 +20,7 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_TEMPERATURE":          "temperature",
     "TRADINGAGENTS_MARKET":               "market",
     "TRADINGAGENTS_VNSTOCK_CACHE":        "vnstock_cache_enabled",
+    "TRADINGAGENTS_SIMPLIZE_ENABLED":     "simplize_enabled",
 }
 
 
@@ -134,6 +135,12 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # Default False so live runs stay fresh (news is time-sensitive). OHLCV is
     # cached separately in load_ohlcv regardless of this flag.
     "vnstock_cache_enabled": False,
+    # Experimental analyst-ratings source (simplize.vn). Unofficial JSON API;
+    # provides broker target prices + Buy/Sell recommendations vnstock lacks.
+    # Non-fatal: any failure degrades to an "unavailable" note, never raises.
+    "simplize_enabled": True,
+    # Number of most-recent analyst reports to surface from simplize.
+    "analyst_report_limit": 5,
     # Benchmark for alpha calculation in the reflection layer.
     # ``benchmark_ticker`` (when set) overrides the suffix map for all
     # tickers; leave it None to use ``benchmark_map`` for auto-detection
