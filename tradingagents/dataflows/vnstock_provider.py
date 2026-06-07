@@ -194,3 +194,22 @@ def get_income_statement(
         return f"# Income statement for {_norm_vn(ticker)} ({freq}) — vnstock (VCI)\n\n" + df.to_csv(index=False)
 
     return cached_call("get_income_statement", [_norm_vn(ticker), freq], _produce)
+
+
+def get_insider_transactions(
+    ticker: Annotated[str, "ticker symbol of the company"],
+) -> str:
+    """Insider transactions for a VN ticker.
+
+    vnstock's VCI source does not expose insider-trading data, and there is no
+    reliable free VN insider feed. Return an explicit note (rather than raising)
+    so the router short-circuits at this primary vendor and never falls through
+    to yfinance, which 404s noisily on Vietnamese symbols. This is a stable
+    known limitation, not transient missing data.
+    """
+    return (
+        f"Insider transaction data is not available for Vietnamese ticker "
+        f"'{_norm_vn(ticker)}' (no insider feed via vnstock). Do not infer "
+        f"insider activity; treat it as unavailable for this market."
+    )
+

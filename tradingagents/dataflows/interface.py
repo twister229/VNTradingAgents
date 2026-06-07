@@ -30,6 +30,7 @@ from .vnstock_provider import (
     get_balance_sheet as get_vnstock_balance_sheet,
     get_cashflow as get_vnstock_cashflow,
     get_income_statement as get_vnstock_income_statement,
+    get_insider_transactions as get_vnstock_insider_transactions,
 )
 from .vn_news import (
     get_news as get_vn_news,
@@ -129,6 +130,7 @@ VENDOR_METHODS = {
         "alpha_vantage": get_alpha_vantage_global_news,
     },
     "get_insider_transactions": {
+        "vnstock": get_vnstock_insider_transactions,
         "alpha_vantage": get_alpha_vantage_insider_transactions,
         "yfinance": get_yfinance_insider_transactions,
     },

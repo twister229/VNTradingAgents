@@ -68,6 +68,27 @@ class VNStockProviderTests(unittest.TestCase):
         self.assertIn("vnstock", out)
         self.assertIn("Close", out)
 
+    def test_insider_transactions_returns_clean_note_not_raise(self):
+        # VN has no insider feed via vnstock. The provider returns an explicit
+        # note (not NoMarketDataError) so the router short-circuits at vnstock
+        # and never falls through to yfinance (which 404s on VN symbols).
+        out = vnstock_provider.get_insider_transactions("FPT")
+        self.assertIn("FPT", out)
+        self.assertIn("not available", out.lower())
+
+
+@pytest.mark.unit
+class VNInsiderRoutingTests(unittest.TestCase):
+    def test_router_uses_vnstock_insider_no_yfinance_fallthrough(self):
+        from tradingagents.dataflows.interface import route_to_vendor, VENDOR_METHODS
+        self.assertIn("vnstock", VENDOR_METHODS["get_insider_transactions"])
+        out = route_to_vendor("get_insider_transactions", "FPT")
+        # vnstock's string return short-circuits the chain; no NO_DATA sentinel
+        # and no yfinance 404 path.
+        self.assertIn("not available", out.lower())
+        self.assertNotIn("NO_DATA_AVAILABLE", out)
+
+
 
 if __name__ == "__main__":
     unittest.main()
