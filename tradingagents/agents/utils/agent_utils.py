@@ -73,11 +73,22 @@ def resolve_instrument_identity(ticker: str) -> dict:
     the price action to a narrative and invent an identity that then cascaded
     through every downstream agent.
 
-    Best-effort by design: if yfinance is unavailable, rate-limited, or doesn't
-    recognise the ticker, we return ``{}`` and the caller falls back to
+    Market-aware: for the Vietnamese market (``config["market"] == "VN"``)
+    identity comes from vnstock, NOT yfinance. yfinance resolves VN tickers to
+    the wrong instrument — e.g. ``VNM`` returns the VanEck Vietnam ETF (US
+    NYSE Arca) instead of Vinamilk (HOSE) — which would inject a wrong company
+    into every agent prompt, the exact failure this function exists to prevent.
+
+    Best-effort by design: if the data source is unavailable, rate-limited, or
+    doesn't recognise the ticker, we return ``{}`` and the caller falls back to
     ticker-only context rather than failing before analysis starts. Cached so
     the lookup happens at most once per ticker per process.
     """
+    from tradingagents.dataflows.config import get_config
+
+    if get_config().get("market") == "VN":
+        return _resolve_vn_identity(ticker)
+
     try:
         info = yf.Ticker(ticker.upper()).info or {}
     except Exception as exc:  # noqa: BLE001 — fail open, never block the run
@@ -99,6 +110,49 @@ def resolve_instrument_identity(ticker: str) -> dict:
         value = _clean_identity_value(info.get(source_key))
         if value:
             identity[target_key] = value
+    return identity
+
+
+def _resolve_vn_identity(ticker: str) -> dict:
+    """Resolve VN instrument identity from vnstock's company overview.
+
+    Uses organ_name (full legal name) / organ_short_name + sector + the VN
+    exchange. Fails open to ``{}`` on any error, like the yfinance path.
+    """
+    import contextlib
+    import io
+
+    sym = ticker.strip().upper().rstrip("+")
+    try:
+        from vnstock.api.company import Company
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            ov = Company(symbol=sym, source="VCI").overview()
+        if ov is None or len(ov) == 0:
+            return {}
+        row = ov.iloc[0]
+    except Exception as exc:  # noqa: BLE001 — fail open, never block the run
+        logger.debug("Could not resolve VN instrument identity for %s: %s", sym, exc)
+        return {}
+
+    def _g(key):
+        try:
+            return _clean_identity_value(str(row[key])) if key in row.index else None
+        except Exception:  # noqa: BLE001
+            return None
+
+    identity: dict[str, str] = {}
+    name = _g("organ_name") or _g("organ_short_name")
+    if name:
+        identity["company_name"] = name
+    sector = _g("sector")
+    if sector:
+        identity["sector"] = sector
+    # com_group_code is the index (e.g. VNINDEX); use it as the exchange label.
+    exch = _g("com_group_code")
+    identity["exchange"] = exch if exch else "HOSE/HNX (Vietnam)"
+    identity["quote_type"] = "EQUITY"
     return identity
 
 

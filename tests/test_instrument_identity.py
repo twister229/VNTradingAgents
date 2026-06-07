@@ -4,9 +4,12 @@ context-anchored message placeholder (#888)."""
 import unittest
 from unittest.mock import patch
 
+import copy
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
+import tradingagents.default_config as default_config
+from tradingagents.dataflows.config import set_config
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     create_msg_delete,
@@ -19,6 +22,14 @@ from tradingagents.agents.utils.agent_utils import (
 class ResolveInstrumentIdentityTests(unittest.TestCase):
     def setUp(self):
         resolve_instrument_identity.cache_clear()
+        # These tests exercise the yfinance resolution path. The repo default is
+        # now market="VN" (which routes to vnstock), so force a non-VN market
+        # here to test the yfinance branch in isolation.
+        cfg = copy.deepcopy(default_config.DEFAULT_CONFIG)
+        cfg["market"] = None
+        set_config(cfg)
+        self.addCleanup(set_config, copy.deepcopy(default_config.DEFAULT_CONFIG))
+        self.addCleanup(resolve_instrument_identity.cache_clear)
 
     def test_resolves_company_metadata_from_yfinance(self):
         with patch("tradingagents.agents.utils.agent_utils.yf.Ticker") as mock:
