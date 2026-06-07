@@ -38,7 +38,11 @@ from tradingagents.agents.utils.agent_utils import (
     get_income_statement,
     get_news,
     get_insider_transactions,
-    get_global_news
+    get_global_news,
+    get_verified_market_snapshot,
+    get_foreign_flow,
+    get_market_depth,
+    get_analyst_ratings,
 )
 
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
@@ -173,6 +177,11 @@ class TradingAgentsGraph:
                     get_stock_data,
                     # Technical indicators
                     get_indicators,
+                    # Anti-hallucination verified snapshot
+                    get_verified_market_snapshot,
+                    # VN microstructure: foreign flow + order-book depth
+                    get_foreign_flow,
+                    get_market_depth,
                 ]
             ),
             "social": ToolNode(
@@ -196,6 +205,8 @@ class TradingAgentsGraph:
                     get_balance_sheet,
                     get_cashflow,
                     get_income_statement,
+                    # VN broker analyst ratings (experimental)
+                    get_analyst_ratings,
                 ]
             ),
         }
@@ -223,7 +234,7 @@ class TradingAgentsGraph:
         # so the suffix loop misses them. Fall back to the VN-Index rather than
         # the US default (SPY) when the configured market is Vietnam.
         if self.config.get("market") == "VN":
-            return benchmark_map.get(".VN", "^VNINDEX")
+            return benchmark_map.get(".VN", "VNINDEX")
         return benchmark_map.get("", "SPY")
 
     def _fetch_returns(
@@ -242,8 +253,21 @@ class TradingAgentsGraph:
             end = start + timedelta(days=holding_days + 7)  # buffer for weekends/holidays
             end_str = end.strftime("%Y-%m-%d")
 
-            stock = yf.Ticker(ticker).history(start=trade_date, end=end_str)
-            bench = yf.Ticker(benchmark).history(start=trade_date, end=end_str)
+            # Use the vendor-aware OHLCV loader (vnstock for VN, yfinance for US,
+            # etc.) so both the ticker and the regional benchmark resolve through
+            # the configured data vendor. Raw yf.Ticker here would 404 on VN
+            # the configured data vendor. Raw yf.Ticker here would 404 on VN
+            # symbols like VNINDEX. load_ohlcv returns rows up to curr_date, so
+            # request the end date as curr_date and slice from the trade date.
+            from tradingagents.dataflows.stockstats_utils import load_ohlcv
+
+            def _window(sym: str):
+                df = load_ohlcv(sym, end_str)
+                df = df[df["Date"] >= start]
+                return df.reset_index(drop=True)
+
+            stock = _window(ticker)
+            bench = _window(benchmark)
 
             if len(stock) < 2 or len(bench) < 2:
                 return None, None, None

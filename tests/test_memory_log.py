@@ -58,6 +58,16 @@ def _price_df(prices):
     return pd.DataFrame({"Close": prices})
 
 
+def _dated_df(prices, start="2026-01-05"):
+    """DataFrame matching load_ohlcv output: a Date column plus Close.
+
+    _fetch_returns filters rows by ``Date >= trade_date``, so the dates must
+    fall on/after the trade date used in the test.
+    """
+    dates = pd.date_range(start=start, periods=len(prices), freq="D")
+    return pd.DataFrame({"Date": dates, "Close": prices})
+
+
 def _make_pm_state(past_context=""):
     """Minimal AgentState dict for portfolio_manager_node."""
     return {
@@ -489,13 +499,11 @@ class TestDeferredReflection:
         stock_prices = [100.0, 102.0, 104.0, 103.0, 105.0, 106.0]
         spy_prices   = [400.0, 402.0, 404.0, 403.0, 405.0, 406.0]
         mock_graph = MagicMock(spec=TradingAgentsGraph)
-        with patch("yfinance.Ticker") as mock_ticker_cls:
-            def _make_ticker(sym):
-                m = MagicMock()
-                m.history.return_value = _price_df(spy_prices if sym == "SPY" else stock_prices)
-                return m
-            mock_ticker_cls.side_effect = _make_ticker
-            raw, alpha, days = TradingAgentsGraph._fetch_returns(mock_graph, "NVDA", "2026-01-05")
+        with patch("tradingagents.dataflows.stockstats_utils.load_ohlcv") as mock_load:
+            def _load(sym, curr_date):
+                return _dated_df(spy_prices if sym == "SPY" else stock_prices, start="2026-01-05")
+            mock_load.side_effect = _load
+            raw, alpha, days = TradingAgentsGraph._fetch_returns(mock_graph, "NVDA", "2026-01-05", benchmark="SPY")
         assert raw is not None and alpha is not None and days is not None
         assert isinstance(raw, float) and isinstance(alpha, float) and isinstance(days, int)
         assert days == 5
@@ -503,21 +511,17 @@ class TestDeferredReflection:
     def test_fetch_returns_too_recent(self):
         """Only 1 data point available → returns (None, None, None), no crash."""
         mock_graph = MagicMock(spec=TradingAgentsGraph)
-        with patch("yfinance.Ticker") as mock_ticker_cls:
-            m = MagicMock()
-            m.history.return_value = _price_df([100.0])
-            mock_ticker_cls.return_value = m
-            raw, alpha, days = TradingAgentsGraph._fetch_returns(mock_graph, "NVDA", "2026-04-19")
+        with patch("tradingagents.dataflows.stockstats_utils.load_ohlcv") as mock_load:
+            mock_load.return_value = _dated_df([100.0], start="2026-04-19")
+            raw, alpha, days = TradingAgentsGraph._fetch_returns(mock_graph, "NVDA", "2026-04-19", benchmark="SPY")
         assert raw is None and alpha is None and days is None
 
     def test_fetch_returns_delisted(self):
         """Empty DataFrame → returns (None, None, None), no crash."""
         mock_graph = MagicMock(spec=TradingAgentsGraph)
-        with patch("yfinance.Ticker") as mock_ticker_cls:
-            m = MagicMock()
-            m.history.return_value = pd.DataFrame({"Close": []})
-            mock_ticker_cls.return_value = m
-            raw, alpha, days = TradingAgentsGraph._fetch_returns(mock_graph, "XXXXXFAKE", "2026-01-10")
+        with patch("tradingagents.dataflows.stockstats_utils.load_ohlcv") as mock_load:
+            mock_load.return_value = pd.DataFrame({"Date": [], "Close": []})
+            raw, alpha, days = TradingAgentsGraph._fetch_returns(mock_graph, "XXXXXFAKE", "2026-01-10", benchmark="SPY")
         assert raw is None and alpha is None and days is None
 
     def test_fetch_returns_spy_shorter_than_stock(self):
@@ -525,13 +529,11 @@ class TestDeferredReflection:
         stock_prices = [100.0, 102.0, 104.0, 103.0, 105.0, 106.0]
         spy_prices   = [400.0, 402.0, 403.0]
         mock_graph = MagicMock(spec=TradingAgentsGraph)
-        with patch("yfinance.Ticker") as mock_ticker_cls:
-            def _make_ticker(sym):
-                m = MagicMock()
-                m.history.return_value = _price_df(spy_prices if sym == "SPY" else stock_prices)
-                return m
-            mock_ticker_cls.side_effect = _make_ticker
-            raw, alpha, days = TradingAgentsGraph._fetch_returns(mock_graph, "NVDA", "2026-01-05")
+        with patch("tradingagents.dataflows.stockstats_utils.load_ohlcv") as mock_load:
+            def _load(sym, curr_date):
+                return _dated_df(spy_prices if sym == "SPY" else stock_prices, start="2026-01-05")
+            mock_load.side_effect = _load
+            raw, alpha, days = TradingAgentsGraph._fetch_returns(mock_graph, "NVDA", "2026-01-05", benchmark="SPY")
         assert raw is not None and alpha is not None and days is not None
         assert days == 2
 

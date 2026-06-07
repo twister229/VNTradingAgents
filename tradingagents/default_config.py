@@ -149,7 +149,7 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # while non-US tickers get their regional index automatically.
     "benchmark_ticker": None,
     "benchmark_map": {
-        ".VN":  "^VNINDEX",    # Vietnam (VN-Index, HOSE)
+        ".VN":  "VNINDEX",    # Vietnam (VN-Index, HOSE) — vnstock symbol form
         ".NS":  "^NSEI",       # NSE India (Nifty 50)
         ".BO":  "^BSESN",      # BSE India (Sensex)
         ".T":   "^N225",       # Tokyo (Nikkei 225)

@@ -26,7 +26,7 @@ class VNConfigDefaultsTests(unittest.TestCase):
 
     def test_vn_benchmark_present(self):
         self.assertIn(".VN", default_config.DEFAULT_CONFIG["benchmark_map"])
-        self.assertEqual(default_config.DEFAULT_CONFIG["benchmark_map"][".VN"], "^VNINDEX")
+        self.assertEqual(default_config.DEFAULT_CONFIG["benchmark_map"][".VN"], "VNINDEX")
 
     def test_market_env_override_registered(self):
         self.assertEqual(
@@ -47,24 +47,24 @@ class VNBenchmarkResolutionTests(unittest.TestCase):
         g = self._graph({
             "benchmark_ticker": None,
             "market": "VN",
-            "benchmark_map": {".VN": "^VNINDEX", "": "SPY"},
+            "benchmark_map": {".VN": "VNINDEX", "": "SPY"},
         })
-        self.assertEqual(TradingAgentsGraph._resolve_benchmark(g, "FPT"), "^VNINDEX")
-        self.assertEqual(TradingAgentsGraph._resolve_benchmark(g, "VNM"), "^VNINDEX")
+        self.assertEqual(TradingAgentsGraph._resolve_benchmark(g, "FPT"), "VNINDEX")
+        self.assertEqual(TradingAgentsGraph._resolve_benchmark(g, "VNM"), "VNINDEX")
 
     def test_dotted_vn_suffix_resolves_to_vn_index(self):
         g = self._graph({
             "benchmark_ticker": None,
             "market": "VN",
-            "benchmark_map": {".VN": "^VNINDEX", "": "SPY"},
+            "benchmark_map": {".VN": "VNINDEX", "": "SPY"},
         })
-        self.assertEqual(TradingAgentsGraph._resolve_benchmark(g, "FPT.VN"), "^VNINDEX")
+        self.assertEqual(TradingAgentsGraph._resolve_benchmark(g, "FPT.VN"), "VNINDEX")
 
     def test_non_vn_market_still_defaults_to_spy(self):
         # No market key -> original US behavior preserved.
         g = self._graph({
             "benchmark_ticker": None,
-            "benchmark_map": {".VN": "^VNINDEX", "": "SPY"},
+            "benchmark_map": {".VN": "VNINDEX", "": "SPY"},
         })
         self.assertEqual(TradingAgentsGraph._resolve_benchmark(g, "NVDA"), "SPY")
 
