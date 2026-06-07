@@ -24,7 +24,15 @@ class TestLoadOhlcvNoPoison(unittest.TestCase):
     def setUp(self):
         self._tmp = os.path.join(os.path.dirname(__file__), "_tmp_cache")
         os.makedirs(self._tmp, exist_ok=True)
-        set_config({"data_cache_dir": self._tmp})
+        # Pin the yfinance vendor: this test exercises the yfinance empty-download
+        # cache-poisoning guard specifically. The repo default is now vnstock
+        # (VN market), so without this pin load_ohlcv would route away from
+        # yf.download and the mock below would never be exercised.
+        set_config({
+            "data_cache_dir": self._tmp,
+            "market": None,
+            "data_vendors": {"core_stock_apis": "yfinance"},
+        })
 
     def tearDown(self):
         for f in os.listdir(self._tmp):

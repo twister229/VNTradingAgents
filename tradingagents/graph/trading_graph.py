@@ -219,6 +219,11 @@ class TradingAgentsGraph:
         for suffix, benchmark in benchmark_map.items():
             if suffix and ticker_upper.endswith(suffix.upper()):
                 return benchmark
+        # VN market: bare 3-letter tickers (FPT, VNM) carry no exchange suffix,
+        # so the suffix loop misses them. Fall back to the VN-Index rather than
+        # the US default (SPY) when the configured market is Vietnam.
+        if self.config.get("market") == "VN":
+            return benchmark_map.get(".VN", "^VNINDEX")
         return benchmark_map.get("", "SPY")
 
     def _fetch_returns(

@@ -1,0 +1,27 @@
+name: VN data canary
+
+# vnstock wraps undocumented VCI/TCBS endpoints that can change without notice.
+# This canary fetches a known-liquid ticker daily and turns the build red the
+# day the data path breaks — early warning before users hit broken data.
+
+on:
+  schedule:
+    # 01:00 UTC on weekdays = 08:00 ICT, after the VN market open.
+    - cron: "0 1 * * 1-5"
+  workflow_dispatch: {}
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package + vnstock
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . vnstock
+      - name: Run VN data canary
+        run: python scripts/vn_data_canary.py

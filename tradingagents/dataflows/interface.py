@@ -24,6 +24,17 @@ from .alpha_vantage import (
 )
 from .alpha_vantage_common import AlphaVantageRateLimitError
 from .symbol_utils import NoMarketDataError
+from .vnstock_provider import (
+    get_stock as get_vnstock_stock,
+    get_fundamentals as get_vnstock_fundamentals,
+    get_balance_sheet as get_vnstock_balance_sheet,
+    get_cashflow as get_vnstock_cashflow,
+    get_income_statement as get_vnstock_income_statement,
+)
+from .vn_news import (
+    get_news as get_vn_news,
+    get_global_news as get_vn_global_news,
+)
 
 # Configuration and routing logic
 from .config import get_config
@@ -62,6 +73,7 @@ TOOLS_CATEGORIES = {
 }
 
 VENDOR_LIST = [
+    "vnstock",
     "yfinance",
     "alpha_vantage",
 ]
@@ -70,37 +82,49 @@ VENDOR_LIST = [
 VENDOR_METHODS = {
     # core_stock_apis
     "get_stock_data": {
+        "vnstock": get_vnstock_stock,
         "alpha_vantage": get_alpha_vantage_stock,
         "yfinance": get_YFin_data_online,
     },
     # technical_indicators
+    # vnstock has no separate indicator impl: its OHLCV flows through
+    # load_ohlcv (vendor-aware), so the same stockstats window function serves
+    # every vendor. Listing it under "vnstock" lets the router pick a vnstock
+    # primary without falling through to yfinance.
     "get_indicators": {
+        "vnstock": get_stock_stats_indicators_window,
         "alpha_vantage": get_alpha_vantage_indicator,
         "yfinance": get_stock_stats_indicators_window,
     },
     # fundamental_data
     "get_fundamentals": {
+        "vnstock": get_vnstock_fundamentals,
         "alpha_vantage": get_alpha_vantage_fundamentals,
         "yfinance": get_yfinance_fundamentals,
     },
     "get_balance_sheet": {
+        "vnstock": get_vnstock_balance_sheet,
         "alpha_vantage": get_alpha_vantage_balance_sheet,
         "yfinance": get_yfinance_balance_sheet,
     },
     "get_cashflow": {
+        "vnstock": get_vnstock_cashflow,
         "alpha_vantage": get_alpha_vantage_cashflow,
         "yfinance": get_yfinance_cashflow,
     },
     "get_income_statement": {
+        "vnstock": get_vnstock_income_statement,
         "alpha_vantage": get_alpha_vantage_income_statement,
         "yfinance": get_yfinance_income_statement,
     },
     # news_data
     "get_news": {
+        "vnstock": get_vn_news,
         "alpha_vantage": get_alpha_vantage_news,
         "yfinance": get_news_yfinance,
     },
     "get_global_news": {
+        "vnstock": get_vn_global_news,
         "yfinance": get_global_news_yfinance,
         "alpha_vantage": get_alpha_vantage_global_news,
     },

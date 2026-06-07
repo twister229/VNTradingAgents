@@ -69,16 +69,26 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     subsequent calls the cache is reused. Rows after curr_date are
     filtered out so backtests never see future prices.
     """
-    # Resolve broker/forex symbols (XAUUSD+ -> GC=F) to Yahoo's convention,
-    # then reject values that would escape the cache directory when
-    # interpolated into the cache filename (e.g. ``../../tmp/x``).
-    canonical = normalize_symbol(symbol)
+    # Resolve the data vendor and target market from config. The OHLCV source
+    # MUST follow the configured vendor: indicators, the verified market
+    # snapshot, and the reflection alpha calc all flow through this function,
+    # so a hardcoded yfinance download here would silently break a non-yfinance
+    # market (e.g. Vietnam via vnstock) even when data_vendors says otherwise.
+    config = get_config()
+    vendor = config.get("data_vendors", {}).get("core_stock_apis", "yfinance")
+    market = config.get("market")
+
+    # Resolve broker/forex symbols (XAUUSD+ -> GC=F) to Yahoo's convention
+    # (VN tickers short-circuit), then reject values that would escape the
+    # cache directory when interpolated into the cache filename.
+    canonical = normalize_symbol(symbol, market)
     safe_symbol = safe_ticker_component(canonical)
 
-    config = get_config()
     curr_date_dt = pd.to_datetime(curr_date)
 
-    # Cache uses a fixed window (15y to today) so one file per symbol
+    # Cache uses a fixed window (5y to today) so one file per symbol. The
+    # vendor is part of the filename so vnstock and yfinance caches for the
+    # same ticker never collide.
     today_date = pd.Timestamp.today()
     start_date = today_date - pd.DateOffset(years=5)
     start_str = start_date.strftime("%Y-%m-%d")
@@ -87,7 +97,7 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     os.makedirs(config["data_cache_dir"], exist_ok=True)
     data_file = os.path.join(
         config["data_cache_dir"],
-        f"{safe_symbol}-YFin-data-{start_str}-{end_str}.csv",
+        f"{safe_symbol}-{vendor}-data-{start_str}-{end_str}.csv",
     )
 
     # A cached file may be empty if a prior fetch failed (unknown symbol,
@@ -100,19 +110,28 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
             data = cached
 
     if data is None:
-        downloaded = yf_retry(lambda: yf.download(
-            canonical,
-            start=start_str,
-            end=end_str,
-            multi_level_index=False,
-            progress=False,
-            auto_adjust=True,
-        ))
-        downloaded = _ensure_date_column(downloaded.reset_index())
+        if vendor == "vnstock":
+            # vnstock provider already normalizes columns to
+            # Date/Open/High/Low/Close/Volume and raises NoMarketDataError on
+            # empty. Import lazily so non-VN installs never need vnstock.
+            from .vnstock_provider import get_vnstock_ohlcv
+
+            downloaded = get_vnstock_ohlcv(canonical, start_str, end_str)
+            downloaded = _ensure_date_column(downloaded)
+        else:
+            downloaded = yf_retry(lambda: yf.download(
+                canonical,
+                start=start_str,
+                end=end_str,
+                multi_level_index=False,
+                progress=False,
+                auto_adjust=True,
+            ))
+            downloaded = _ensure_date_column(downloaded.reset_index())
         # Only cache real data — never persist an empty frame.
         if downloaded.empty or "Close" not in downloaded.columns:
             raise NoMarketDataError(
-                symbol, canonical, "Yahoo Finance returned no rows"
+                symbol, canonical, f"{vendor} returned no rows"
             )
         downloaded.to_csv(data_file, index=False, encoding="utf-8")
         data = downloaded

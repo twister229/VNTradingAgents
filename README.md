@@ -27,6 +27,28 @@
 
 # TradingAgents: Multi-Agents LLM Financial Trading Framework
 
+> ## 🇻🇳 Vietnamese Market Edition
+>
+> This is a fork of [TradingAgents](https://github.com/TauricResearch/TradingAgents)
+> (Tauric Research) customized to analyze the **Vietnamese stock market only**
+> (HOSE / HNX / UPCOM). The key differences from upstream:
+>
+> - **Data via [vnstock](https://github.com/thinh-vu/vnstock)** (VCI source) — no
+>   API key, no Yahoo Finance. Prices, fundamentals, and company news for VN
+>   tickers like `FPT`, `VNM`, `HPG`, `VIC`, `SSI`, `MWG`.
+> - **VN news**: ticker news from vnstock + a cafef RSS fallback; macro headlines
+>   from cafef RSS. No Reddit / StockTwits (no Vietnamese coverage).
+> - **Sentiment guardrail**: the Sentiment Analyst abstains (in code, before the
+>   LLM) when too little news exists, instead of inferring sentiment from noise.
+> - **VN specifics**: VN-Index alpha benchmark, Vietnamese-language reports, a
+>   HOSE/Tet trading calendar, and a daily CI canary on the vnstock data path.
+> - **Reproducible runs**: opt-in response cache (`vnstock_cache_enabled`) freezes
+>   fundamentals + news so research results repeat.
+>
+> Quickstart: `pip install -e . vnstock`, set one LLM key, run `tradingagents`
+> and enter a VN ticker (default `FPT`). See [Markets and tickers](#markets-and-tickers).
+> Upstream attribution and citation are preserved at the bottom of this README.
+
 ## News
 - [2026-05] **TradingAgents v0.2.5** released with the grounded Sentiment Analyst, GPT-5.5 etc. model coverage, Qwen/GLM/MiniMax dual-region support, `TRADINGAGENTS_*` env-var configurability with API-key auto-detection, remote Ollama support, non-US alpha benchmarks, and ticker path-traversal hardening. See [CHANGELOG.md](CHANGELOG.md) for the full list.
 - [2026-04] **TradingAgents v0.2.4** released with structured-output agents (Research Manager, Trader, Portfolio Manager), LangGraph checkpoint resume, persistent decision log, DeepSeek/Qwen/GLM/Azure provider support, Docker, and a Windows UTF-8 encoding fix.
@@ -135,7 +157,9 @@ docker compose --profile ollama run --rm tradingagents-ollama
 
 ### Required APIs
 
-TradingAgents supports multiple LLM providers. Set the API key for your chosen provider:
+This edition fetches all market data (prices, fundamentals, news) through
+**vnstock**, which needs **no API key**. You only need one LLM provider key. Set
+the key for your chosen provider:
 
 ```bash
 export OPENAI_API_KEY=...          # OpenAI (GPT)
@@ -173,13 +197,16 @@ You will see a screen where you can select your desired tickers, analysis date, 
 
 ### Markets and tickers
 
-TradingAgents works with any market Yahoo Finance covers, using the exchange-suffixed ticker. Company identity and the alpha benchmark resolve automatically per market.
+This edition analyzes the **Vietnamese market only**, using bare HOSE/HNX/UPCOM
+ticker symbols (no exchange suffix). Data comes from vnstock with no API key
+required. Company identity and the VN-Index alpha benchmark resolve automatically.
 
-- US: `AAPL`, `SPY`
-- Hong Kong: `0700.HK` · Tokyo: `7203.T` · London: `AZN.L`
-- India: `RELIANCE.NS`, `.BO` · Canada: `.TO` · Australia: `.AX`
-- China A-shares: Shanghai `.SS`, Shenzhen `.SZ` (e.g. `600519.SS` for Kweichow Moutai)
-- Crypto: `BTC-USD`, `ETH-USD`
+- HOSE blue chips: `FPT`, `VNM`, `HPG`, `VIC`, `VCB`, `MWG`, `SSI`, `MSN`
+- Enter the ticker exactly as listed on the exchange (e.g. `FPT`); the CLI
+  defaults to `FPT`.
+- The market is fixed to Vietnam via `config["market"] == "VN"`, which selects
+  the vnstock vendor and VN symbol handling. To analyze a different market you
+  would need the upstream framework, not this fork.
 
 <p align="center">
   <img src="assets/cli/cli_init.png" width="100%" style="display: inline-block; margin: 0 2%;">
@@ -212,7 +239,7 @@ from tradingagents.default_config import DEFAULT_CONFIG
 ta = TradingAgentsGraph(debug=True, config=DEFAULT_CONFIG.copy())
 
 # forward propagate
-_, decision = ta.propagate("NVDA", "2026-01-15")
+_, decision = ta.propagate("FPT", "2026-01-15")
 print(decision)
 ```
 
@@ -229,7 +256,7 @@ config["quick_think_llm"] = "gpt-5.4-mini" # Model for quick tasks
 config["max_debate_rounds"] = 2
 
 ta = TradingAgentsGraph(debug=True, config=config)
-_, decision = ta.propagate("NVDA", "2026-01-15")
+_, decision = ta.propagate("FPT", "2026-01-15")
 print(decision)
 ```
 
@@ -241,7 +268,7 @@ TradingAgents persists two kinds of state across runs.
 
 ### Decision log
 
-The decision log is always on. Each completed run appends its decision to `~/.tradingagents/memory/trading_memory.md`. On the next run for the same ticker, TradingAgents fetches the realised return (raw and alpha vs SPY), generates a one-paragraph reflection, and injects the most recent same-ticker decisions plus recent cross-ticker lessons into the Portfolio Manager prompt, so each analysis carries forward what worked and what didn't.
+The decision log is always on. Each completed run appends its decision to `~/.tradingagents/memory/trading_memory.md`. On the next run for the same ticker, TradingAgents fetches the realised return (raw and alpha vs the VN-Index), generates a one-paragraph reflection, and injects the most recent same-ticker decisions plus recent cross-ticker lessons into the Portfolio Manager prompt, so each analysis carries forward what worked and what didn't.
 
 Override the path with `TRADINGAGENTS_MEMORY_LOG_PATH`.
 
@@ -260,7 +287,7 @@ tradingagents analyze --clear-checkpoints    # reset before running
 config = DEFAULT_CONFIG.copy()
 config["checkpoint_enabled"] = True
 ta = TradingAgentsGraph(config=config)
-_, decision = ta.propagate("NVDA", "2026-01-15")
+_, decision = ta.propagate("FPT", "2026-01-15")
 ```
 
 ## Reproducibility
@@ -269,7 +296,14 @@ TradingAgents is LLM-driven, so two runs of the same ticker and date can differ.
 
 Language model sampling is non-deterministic. Even at a fixed temperature, providers do not guarantee byte-identical output across calls, and reasoning models (the default GPT-5.x family, and any thinking-mode model) vary the most because their internal reasoning is itself sampled.
 
-Live data moves. News, StockTwits, and Reddit return different content as time passes, so a run today sees different inputs than a run last week even for the same historical trade date. Pin the analysis date to hold the price and indicator window fixed, but the social and news sources still reflect "now".
+Live data moves. Vietnamese ticker news (vnstock / cafef) and macro headlines (cafef RSS) return different content as time passes, so a run today sees different inputs than a run last week even for the same historical trade date. To freeze the data inputs for reproducible research, enable the response cache:
+
+```python
+config = DEFAULT_CONFIG.copy()
+config["vnstock_cache_enabled"] = True   # freeze fundamentals + news to disk
+```
+
+The first run for a given ticker/date writes fundamentals and news under `~/.tradingagents/cache/responses/`; subsequent identical runs read from disk. OHLCV is always cached separately. The cache is off by default so live runs stay fresh. Pin the analysis date to hold the price and indicator window fixed.
 
 To reduce variation you can lower the sampling temperature. Set `temperature` in your config (or `TRADINGAGENTS_TEMPERATURE` in `.env`); lower values make models that honor it more repeatable. Reasoning models largely ignore temperature, so for tighter reproducibility pair a low temperature with a non-reasoning model such as `gpt-4.1`.
 

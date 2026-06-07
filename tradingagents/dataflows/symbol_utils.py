@@ -89,10 +89,14 @@ _ALIASES = {
 _YAHOO_SAFE = re.compile(r"^[A-Za-z0-9._\-\^=]+$")
 
 
-def normalize_symbol(raw: str) -> str:
+def normalize_symbol(raw: str, market: str | None = None) -> str:
     """Map a user/broker symbol to its canonical Yahoo Finance symbol.
 
     Resolution order (first match wins):
+      0. Vietnam market (``market == "VN"``): return the upper-cased symbol
+         unchanged. VN tickers are bare 3-letter codes (FPT, VNM, HPG, SSI)
+         that must NOT be rewritten by the Yahoo forex/crypto/CFD rules below
+         (e.g. ``SSI`` is a real HOSE ticker, not a symbol to alias).
       1. Explicit alias table (metals, energy, index CFDs).
       2. Crypto rule: ``<BASE>USD`` where BASE is a known crypto -> ``BASE-USD``.
       3. Forex rule: six letters that are two ISO currency codes -> ``PAIR=X``.
@@ -109,6 +113,10 @@ def normalize_symbol(raw: str) -> str:
     s = raw.strip().upper()
     # Broker CFD/qualifier suffixes Yahoo never uses.
     s = s.rstrip("+")
+
+    # Vietnam tickers bypass all Yahoo rewrite rules.
+    if market == "VN":
+        return s
 
     if s in _ALIASES:
         canonical = _ALIASES[s]

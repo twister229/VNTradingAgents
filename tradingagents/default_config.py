@@ -18,6 +18,8 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_CHECKPOINT_ENABLED":   "checkpoint_enabled",
     "TRADINGAGENTS_BENCHMARK_TICKER":     "benchmark_ticker",
     "TRADINGAGENTS_TEMPERATURE":          "temperature",
+    "TRADINGAGENTS_MARKET":               "market",
+    "TRADINGAGENTS_VNSTOCK_CACHE":        "vnstock_cache_enabled",
 }
 
 
@@ -75,7 +77,11 @@ DEFAULT_CONFIG = _apply_env_overrides({
     "checkpoint_enabled": False,
     # Output language for analyst reports and final decision
     # Internal agent debate stays in English for reasoning quality
-    "output_language": "English",
+    "output_language": "Vietnamese",
+    # Target market. "VN" selects Vietnamese-market behavior: vnstock data
+    # vendor, VN symbol normalization (no Yahoo =X/-USD suffixing), and the
+    # VN-Index benchmark. Override with TRADINGAGENTS_MARKET.
+    "market": "VN",
     # Debate and discussion settings
     "max_debate_rounds": 1,
     "max_risk_discuss_rounds": 1,
@@ -87,27 +93,47 @@ DEFAULT_CONFIG = _apply_env_overrides({
     "news_article_limit": 20,             # max articles per ticker (ticker-news)
     "global_news_article_limit": 10,      # max articles for global/macro news
     "global_news_lookback_days": 7,       # macro news lookback window
+    # F2 guardrail: minimum usable sentiment items (news) before the Sentiment
+    # Analyst is allowed to reason. Below this, the node deterministically
+    # abstains (Neutral / low confidence) rather than let the LLM infer
+    # sentiment from too little data — for a research tool, a confident read on
+    # noise is worse than an explicit "insufficient data".
+    "sentiment_min_items": 3,
     # Search queries used by get_global_news for macro headlines. Extend or
     # replace to broaden geographic / sector coverage.
     "global_news_queries": [
-        "Federal Reserve interest rates inflation",
-        "S&P 500 earnings GDP economic outlook",
-        "geopolitical risk trade war sanctions",
-        "ECB Bank of England BOJ central bank policy",
-        "oil commodities supply chain energy",
+        "Ngân hàng Nhà nước lãi suất điều hành",
+        "lạm phát Việt Nam CPI",
+        "tỷ giá USD VND",
+        "tăng trưởng GDP Việt Nam",
+        "FDI xuất nhập khẩu Việt Nam",
+        "khối ngoại mua bán ròng HOSE",
     ],
+    # cafef RSS feeds for VN news. Used by the vn_news vendor: `markets` backs
+    # the ticker-news fallback and macro news; extend with more cafef sections
+    # as needed. RSS (structured XML) is far more stable than HTML scraping.
+    "vn_news_feeds": {
+        "markets": "https://cafef.vn/thi-truong-chung-khoan.rss",
+        "macro": "https://cafef.vn/vi-mo-dau-tu.rss",
+    },
     # Data vendor configuration
     # Category-level configuration (default for all tools in category)
     "data_vendors": {
-        "core_stock_apis": "yfinance",       # Options: alpha_vantage, yfinance
-        "technical_indicators": "yfinance",  # Options: alpha_vantage, yfinance
-        "fundamental_data": "yfinance",      # Options: alpha_vantage, yfinance
-        "news_data": "yfinance",             # Options: alpha_vantage, yfinance
+        "core_stock_apis": "vnstock",       # Options: vnstock, alpha_vantage, yfinance
+        "technical_indicators": "vnstock",  # Options: vnstock, alpha_vantage, yfinance
+        "fundamental_data": "vnstock",      # Options: vnstock, alpha_vantage, yfinance
+        "news_data": "vnstock",             # Options: vnstock, alpha_vantage, yfinance
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {
         # Example: "get_stock_data": "alpha_vantage",  # Override category default
     },
+    # Opt-in response cache for vnstock fundamentals + news (string results),
+    # for reproducible research runs: when True, the first fetch is written to
+    # data_cache_dir/responses/ and subsequent identical calls read from disk.
+    # Default False so live runs stay fresh (news is time-sensitive). OHLCV is
+    # cached separately in load_ohlcv regardless of this flag.
+    "vnstock_cache_enabled": False,
     # Benchmark for alpha calculation in the reflection layer.
     # ``benchmark_ticker`` (when set) overrides the suffix map for all
     # tickers; leave it None to use ``benchmark_map`` for auto-detection
@@ -116,6 +142,7 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # while non-US tickers get their regional index automatically.
     "benchmark_ticker": None,
     "benchmark_map": {
+        ".VN":  "^VNINDEX",    # Vietnam (VN-Index, HOSE)
         ".NS":  "^NSEI",       # NSE India (Nifty 50)
         ".BO":  "^BSESN",      # BSE India (Sensex)
         ".T":   "^N225",       # Tokyo (Nikkei 225)

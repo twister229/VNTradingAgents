@@ -7,7 +7,7 @@ behavior we added for the Trader, Research Manager, and Sentiment Analyst
 so they share the same deterministic output shape.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import ValidationError
@@ -292,7 +292,7 @@ class TestRenderSentimentReport:
 
 def _make_sentiment_state():
     return {
-        "company_of_interest": "NVDA",
+        "company_of_interest": "FPT",
         "trade_date": "2026-01-15",
         "asset_type": "stock",
         "messages": [],
@@ -306,7 +306,7 @@ def _structured_sentiment_llm(captured: dict, report: SentimentReport | None = N
         report = SentimentReport(
             overall_band=SentimentBand.BULLISH, overall_score=7.5,
             confidence="high",
-            narrative="StockTwits 75% bullish. News constructive. Reddit upbeat.",
+            narrative="News flow constructive; multiple positive items.",
         )
     structured = MagicMock()
     structured.invoke.side_effect = lambda prompt: (
@@ -317,8 +317,25 @@ def _structured_sentiment_llm(captured: dict, report: SentimentReport | None = N
     return llm
 
 
+# Enough VN news items to clear the F2 guardrail so the LLM path runs.
+_FAKE_NEWS_ITEMS = [
+    {"title": f"FPT tin {i}", "description": "noi dung", "link": "", "pub_date": None}
+    for i in range(5)
+]
+
+
 @pytest.mark.unit
 class TestSentimentAnalystAgent:
+    @pytest.fixture(autouse=True)
+    def _supply_news(self):
+        # The VN sentiment node sources items via get_news_items; provide enough
+        # to pass the guardrail so these tests exercise the LLM reasoning path.
+        with patch(
+            "tradingagents.agents.analysts.sentiment_analyst.get_news_items",
+            return_value=list(_FAKE_NEWS_ITEMS),
+        ):
+            yield
+
     def test_structured_path_produces_rendered_markdown(self):
         captured = {}
         report = SentimentReport(
@@ -341,7 +358,7 @@ class TestSentimentAnalystAgent:
     def test_prompt_contains_ticker(self):
         captured = {}
         create_sentiment_analyst(_structured_sentiment_llm(captured))(_make_sentiment_state())
-        assert any("NVDA" in str(m) for m in captured["prompt"])
+        assert any("FPT" in str(m) for m in captured["prompt"])
 
     def test_falls_back_to_freetext_when_structured_unavailable(self):
         plain = "**Overall Sentiment:** **Bearish** (Score: 3.0/10)\n**Confidence:** Low\n\nLimited data."
